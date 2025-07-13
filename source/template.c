@@ -151,6 +151,9 @@ int main(int argc, char **argv) {
     printf("Press A to move rectangle down, B to move up.\n");
     printf("Press HOME to exit.\n");
 
+    for (int i = 0; i < 180; i++) {
+        VIDEO_WaitVSync();
+    }
 
     while(1) {
         // Call WPAD_ScanPads each loop, this reads the latest controller states
