@@ -56,7 +56,7 @@ int main(int argc, char **argv) {
         VIDEO_WaitVSync();
     }
 
-    tcp_connect_and_listen("192.168.1.100", 5000);
+    tcp_connect_and_listen("192.168.2.2", 5000);
 
     while(1) {
         WPAD_ScanPads();
