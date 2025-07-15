@@ -4,7 +4,22 @@
 #include <wiiuse/wpad.h>
 #include <network.h>
 #include <string.h>
+
+#include <ogc/lwp.h>
 #include "mqtt_client.h"
+// Global running flag for thread control
+volatile bool running = true;
+
+// Thread handle and stack for MQTT
+static lwp_t mqtt_thread = (lwp_t)NULL;
+#define MQTT_THREAD_STACKSIZE 8192
+static u8 mqtt_thread_stack[MQTT_THREAD_STACKSIZE] ATTRIBUTE_ALIGN(32);
+
+// Thread wrapper for mqtt_receive_loop
+void* mqtt_thread_func(void* arg) {
+    mqtt_receive_loop();
+    return NULL;
+}
 
 // Static variables for video and graphics
 static void *xfb = NULL;
@@ -88,14 +103,25 @@ int main(int argc, char **argv) {
         }
     }
 
-    // Connect to MQTT broker and receive messages
-    mqtt_receive_loop();
 
-    while(1) {
+    // Start MQTT receive loop in a separate thread
+    LWP_CreateThread(&mqtt_thread, mqtt_thread_func, NULL, mqtt_thread_stack, MQTT_THREAD_STACKSIZE, 50);
+
+    // Main loop: poll for HOME button and exit cleanly
+    while(running) {
         WPAD_ScanPads();
         u32 pressed = WPAD_ButtonsDown(0);
-        if (pressed & WPAD_BUTTON_HOME) exit(0);
+        if (pressed & WPAD_BUTTON_HOME) {
+            printf("HOME button pressed. Shutting down project...\n");
+            running = false;
+            break;
+        }
         VIDEO_WaitVSync();
     }
+
+    // Wait for MQTT thread to finish
+    void* thread_ret;
+    LWP_JoinThread(mqtt_thread, &thread_ret);
+
     return 0;
 }

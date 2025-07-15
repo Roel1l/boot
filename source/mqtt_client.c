@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <unistd.h>
 
 #define MQTT_BROKER_IP "5.196.78.28" // test.mosquitto.org
 #define MQTT_PORT 1883
@@ -51,6 +52,7 @@ void mqtt_receive_loop() {
     char buffer[512];
     int bytes;
 
+    extern volatile bool running;
     printf("Connecting to MQTT broker...\n");
     sock = net_socket(AF_INET, SOCK_STREAM, IPPROTO_IP);
     if (sock < 0) {
@@ -69,6 +71,10 @@ void mqtt_receive_loop() {
     }
     printf("Connected to broker\n");
 
+    // Set socket to non-blocking mode (libogc: use net_ioctl with FIONBIO)
+    u32 nbio = 1;
+    net_ioctl(sock, FIONBIO, &nbio);
+
     if (mqtt_send_connect(sock) < 0) {
         printf("Failed to send CONNECT\n");
         net_close(sock);
@@ -76,12 +82,27 @@ void mqtt_receive_loop() {
     }
     printf("CONNECT sent\n");
 
-    bytes = net_recv(sock, buffer, sizeof(buffer), 0);
-    if (bytes < 4 || (unsigned char)buffer[0] != 0x20) {
-        printf("No CONNACK\n");
-        net_close(sock);
-        return;
+    // Wait for CONNACK (with running check)
+    int wait_count = 0;
+    while (running) {
+        bytes = net_recv(sock, buffer, sizeof(buffer), 0);
+        if (bytes < 0) {
+            usleep(10000); // 10ms
+            if (++wait_count > 500) { // 5s timeout
+                printf("Timeout waiting for CONNACK\n");
+                net_close(sock);
+                return;
+            }
+            continue;
+        }
+        if (bytes < 4 || (unsigned char)buffer[0] != 0x20) {
+            printf("No CONNACK\n");
+            net_close(sock);
+            return;
+        }
+        break;
     }
+    if (!running) { net_close(sock); return; }
     printf("CONNACK received\n");
 
     if (mqtt_send_subscribe(sock, MQTT_TOPIC) < 0) {
@@ -91,15 +112,31 @@ void mqtt_receive_loop() {
     }
     printf("SUBSCRIBE sent for topic: %s\n", MQTT_TOPIC);
 
-    bytes = net_recv(sock, buffer, sizeof(buffer), 0);
-    if (bytes < 5 || (unsigned char)buffer[0] != 0x90) {
-        printf("No SUBACK\n");
-        net_close(sock);
-        return;
+    // Wait for SUBACK (with running check)
+    wait_count = 0;
+    while (running) {
+        bytes = net_recv(sock, buffer, sizeof(buffer), 0);
+        if (bytes < 0) {
+            usleep(10000);
+            if (++wait_count > 500) {
+                printf("Timeout waiting for SUBACK\n");
+                net_close(sock);
+                return;
+            }
+            continue;
+        }
+        if (bytes < 5 || (unsigned char)buffer[0] != 0x90) {
+            printf("No SUBACK\n");
+            net_close(sock);
+            return;
+        }
+        break;
     }
+    if (!running) { net_close(sock); return; }
     printf("SUBACK received\n");
 
-    while (1) {
+    // Main receive loop, check running flag
+    while (running) {
         bytes = net_recv(sock, buffer, sizeof(buffer), 0);
         if (bytes > 0) {
             if ((unsigned char)buffer[0] == 0x30) {
@@ -112,8 +149,7 @@ void mqtt_receive_loop() {
             printf("Broker closed connection\n");
             break;
         } else {
-            printf("Error receiving MQTT\n");
-            break;
+            usleep(10000); // 10ms
         }
     }
     net_close(sock);
