@@ -1,9 +1,17 @@
 ﻿using MQTTnet;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.DependencyInjection;
 
 var builder = WebApplication.CreateBuilder(args);
+
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen();
+
 var app = builder.Build();
+
+app.UseSwagger();
+app.UseSwaggerUI();
 
 var factory = new MqttClientFactory();
 var mqttClient = factory.CreateMqttClient();
@@ -16,22 +24,26 @@ var options = new MqttClientOptionsBuilder()
 await mqttClient.ConnectAsync(options);
 Console.WriteLine("Connected to MQTT broker.");
 
-app.MapGet("/send", async (HttpRequest request) =>
-{
-    var messageText = request.Query["message"].ToString();
-    if (string.IsNullOrWhiteSpace(messageText))
-        return Results.BadRequest("Missing 'message' query parameter.");
-
-    var message = new MqttApplicationMessageBuilder()
-        .WithTopic("wii/test")
-        .WithPayload(messageText)
-        .Build();
-
-    await mqttClient.PublishAsync(message);
-    return Results.Ok($"Message '{messageText}' sent.");
+app.MapGet("/", context => {
+    context.Response.Redirect("/swagger");
+    return Task.CompletedTask;
 });
 
-// Start the web server and listen on all network interfaces for port 5000
+app.MapGet("/messageWii", async (string message) =>
+{
+    if (string.IsNullOrWhiteSpace(message))
+        return Results.BadRequest("Missing 'message' query parameter.");
+
+    var mqttMessage = new MqttApplicationMessageBuilder()
+        .WithTopic("wii/test")
+        .WithPayload(message)
+        .Build();
+
+    await mqttClient.PublishAsync(mqttMessage);
+    return Results.Ok($"Message '{message}' sent.");
+});
+
+// Start the web server and listen on all network interfaces for port 80
 _ = app.RunAsync("http://0.0.0.0:80");
 
 while (true)
