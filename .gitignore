@@ -1,3 +1,6 @@
 /boot.dol
 /boot.elf
 /build
+/PcHostApplication/bin
+/PcHostApplication/obj
+/PcHostApplication/.vs

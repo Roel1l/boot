@@ -1,9 +1,10 @@
 #include <stdio.h>
 #include <stdlib.h>
-// ...existing code...
 #include <gccore.h>
 #include <wiiuse/wpad.h>
-#include "tcp_client.h"
+#include <network.h>
+#include <string.h>
+#include "mqtt_client.h"
 
 // Static variables for video and graphics
 static void *xfb = NULL;
@@ -12,6 +13,7 @@ static GXRModeObj *rmode = NULL;
 //---------------------------------------------------------------------------------
 //---------------------------------------------------------------------------------
 int main(int argc, char **argv) {
+
     // Initialise the video system
     VIDEO_Init();
 
@@ -56,7 +58,38 @@ int main(int argc, char **argv) {
         VIDEO_WaitVSync();
     }
 
-    tcp_connect_and_listen("192.168.2.2", 5000);
+    // Initialize network subsystem just before MQTT
+    if (net_init() < 0) {
+        printf("Network init failed\n");
+        return 1;
+    }
+    printf("Network initialized\n");
+
+    // Simple TCP connect-based ping to test.mosquitto.org
+    {
+        int sock;
+        struct sockaddr_in addr;
+        sock = net_socket(AF_INET, SOCK_STREAM, IPPROTO_IP);
+        if (sock < 0) {
+            printf("Ping: socket creation failed\n");
+        } else {
+            memset(&addr, 0, sizeof(addr));
+            addr.sin_family = AF_INET;
+            addr.sin_port = htons(1883);
+            addr.sin_addr.s_addr = inet_addr("5.196.78.28");
+            printf("Ping: attempting to connect to test.mosquitto.org...\n");
+            if (net_connect(sock, (struct sockaddr*)&addr, sizeof(addr)) == 0) {
+                printf("Ping: test.mosquitto.org is reachable!\n");
+                net_close(sock);
+            } else {
+                printf("Ping: test.mosquitto.org is NOT reachable!\n");
+                net_close(sock);
+            }
+        }
+    }
+
+    // Connect to MQTT broker and receive messages
+    mqtt_receive_loop();
 
     while(1) {
         WPAD_ScanPads();
