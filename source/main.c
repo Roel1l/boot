@@ -73,7 +73,7 @@ int main(int argc, char **argv) {
         VIDEO_WaitVSync();
     }
 
-    // Initialize network subsystem just before MQTT
+    //Initialize network subsystem just before MQTT
     if (net_init() < 0) {
         printf("Network init failed\n");
         return 1;
