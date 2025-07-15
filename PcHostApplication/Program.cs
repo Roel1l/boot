@@ -32,7 +32,7 @@ app.MapGet("/send", async (HttpRequest request) =>
 });
 
 // Start the web server and listen on all network interfaces for port 5000
-_ = app.RunAsync("http://0.0.0.0:5000");
+_ = app.RunAsync("http://0.0.0.0:80");
 
 while (true)
 {
